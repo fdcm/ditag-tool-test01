@@ -9,6 +9,10 @@ using schemas semantically annotated against a reference ontology.
 
 The source code of DITAG-Tool is publicly available in this repository.
 
+## Validation Resources
+
+The validation resources, including XML files, XSDs, and ontologies, are available at http://gres.uninova.pt/ditag/validation/.
+
 ## Project
 
 DITAG-Tool was developed in the context of the Arrowhead fPVN project (https://doi.org/10.3030/101111977)
