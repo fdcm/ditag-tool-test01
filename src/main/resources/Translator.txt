@@ -1,0 +1,417 @@
+package pt.uninova.ditag.translator;
+
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import java.lang.reflect.Field;
+
+import java.util.*;
+
+import org.json.JSONObject;
+import org.json.JSONTokener;
+import org.json.XML;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
+
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
+import jakarta.xml.bind.annotation.XmlAttribute;
+import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlSchemaType;
+import jakarta.xml.bind.annotation.XmlType;
+import jakarta.xml.bind.annotation.XmlValue;
+import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
+import jakarta.xml.bind.annotation.adapters.NormalizedStringAdapter;
+import jakarta.xml.bind.annotation.XmlRegistry;
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBException;
+import jakarta.xml.bind.Marshaller;
+import jakarta.xml.bind.Unmarshaller;
+
+import org.xml.sax.InputSource;
+
+import javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFactory;
+
+import com.ezylang.evalex.Expression;
+
+import java.util.Map;
+import static java.util.Map.entry;
+
+[CONSUMER CLASS]
+
+[PROVIDER CLASS]
+		
+public class Translator {
+	
+	Consumer consumer;
+	Provider provider;
+	
+[MAPS]
+
+[MAP2CCSV]
+	
+	public static void main(String[] args) {
+        Translator translator = new Translator();
+        String path = args[2];
+        if (args[1].equals("raw")) {
+        	try {
+        		String extension = checkDataFormat(args[2]);       		
+            	Path tempFilePath = Files.createTempFile(UUID.randomUUID().toString(), extension);      		
+				Files.write(tempFilePath, args[2].getBytes());
+				path = tempFilePath.toString();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+           
+        }
+        translator.translateFromPath(path);
+        translator.exportAsJSON(translator.consumer, args[0]);
+        try {
+			String xmlString = translator.exportAsXML(translator.consumer, args[0]);
+			translator.exportAsCSV(xmlString, args[0]);
+		} catch (JAXBException e) {
+			e.printStackTrace();
+		}
+    }
+	
+	public void translateFromPath(String providerPath) {
+		provider = readProvider(providerPath);
+		this.translate();
+	}
+	
+	public void translate() {
+		this.setIndividual();
+		
+		try {		
+[LOGIC]
+		} catch (Exception e) {}
+	}
+	
+	public String translateToXmlString(String providerDocument) {
+	    try {
+	        JAXBContext jaxbContext = JAXBContext.newInstance(Provider.class);
+	        Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
+	        provider = (Provider) unmarshaller.unmarshal(
+	            new javax.xml.transform.stream.StreamSource(
+	                new java.io.StringReader(providerDocument)
+	            )
+	        );
+	        
+	        this.translate();
+	        
+	        JAXBContext consumerContext = JAXBContext.newInstance(Consumer.class);
+	        Marshaller marshaller = consumerContext.createMarshaller();
+	        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+
+	        java.io.StringWriter sw = new java.io.StringWriter();
+	        marshaller.marshal(consumer, sw);
+
+	        return sw.toString();
+	    } catch (JAXBException e) {
+	        e.printStackTrace();
+	        return "";
+	    }
+	}
+	
+	public String translateToCsvString(String providerDocument) {
+		String xmlString = this.translateToXmlString(providerDocument);
+		
+		return translateXmlStringToCsvString(xmlString);
+	}
+	
+	public String translateToJsonString(String providerDocument) {
+		String xmlString = this.translateToXmlString(providerDocument);
+		
+		return translateXmlStringToJsonString(xmlString);
+	}
+	
+	private String translateXmlStringToCsvString(String xmlString) {
+		try {
+	        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+	        DocumentBuilder builder = factory.newDocumentBuilder();
+	        Document doc = builder.parse(new InputSource(new StringReader(xmlString)));
+
+	        XPath xpath = XPathFactory.newInstance().newXPath();
+
+	        Map<String, List<String>> xpathValues = new LinkedHashMap<>();
+	        int maxSize = 0;
+
+	        for (Map.Entry<String, String> entry : consumerCsvMappings.entrySet()) {
+	            String header = entry.getKey();
+	            String xp = entry.getValue().trim();
+
+	            NodeList nodes = (NodeList) xpath.evaluate(xp, doc, XPathConstants.NODESET);
+	            List<String> values = new ArrayList<>();
+
+	            for (int i = 0; i < nodes.getLength(); i++) {
+	                values.add(nodes.item(i).getTextContent());
+	            }
+
+	            xpathValues.put(header, values);
+	            maxSize = Math.max(maxSize, values.size());
+	        }
+
+	        StringBuilder csv = new StringBuilder();
+
+	        List<String> headers = new ArrayList<>(consumerCsvMappings.keySet());
+	        csv.append(String.join(",", headers)).append("\n");
+
+	        for (int i = 0; i < maxSize; i++) {
+	            List<String> row = new ArrayList<>();
+
+	            for (String header : headers) {
+	                List<String> values = xpathValues.get(header);
+	                row.add(i < values.size() ? String.format("\"%s\"", values.get(i)) : "");
+	            }
+
+	            csv.append(String.join(",", row)).append("\n");
+	        }
+	        return csv.toString();
+	        
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return "";
+	    }
+
+	}
+	
+	public String translateXmlStringToJsonString(String xmlString) {
+	    try {
+	        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+	        DocumentBuilder builder = factory.newDocumentBuilder();
+	        Document doc = builder.parse(new InputSource(new StringReader(xmlString)));
+
+	        XPath xpath = XPathFactory.newInstance().newXPath();
+
+	        Map<String, List<String>> xpathValues = new LinkedHashMap<>();
+	        int maxSize = 0;
+
+	        for (Map.Entry<String, String> entry : consumerCsvMappings.entrySet()) {
+	            String header = entry.getKey();
+	            String xp = entry.getValue().trim();
+
+	            NodeList nodes = (NodeList) xpath.evaluate(xp, doc, XPathConstants.NODESET);
+	            List<String> values = new ArrayList<>();
+
+	            for (int i = 0; i < nodes.getLength(); i++) {
+	                values.add(nodes.item(i).getTextContent());
+	            }
+
+	            xpathValues.put(header, values);
+	            maxSize = Math.max(maxSize, values.size());
+	        }
+
+	        List<Map<String, String>> jsonObjects = new ArrayList<>();
+
+	        for (int i = 0; i < maxSize; i++) {
+	            Map<String, String> obj = new LinkedHashMap<>();
+	            for (String header : xpathValues.keySet()) {
+	                List<String> values = xpathValues.get(header);
+	                obj.put(header, i < values.size() ? values.get(i) : "");
+	            }
+	            jsonObjects.add(obj);
+	        }
+
+	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+	        return gson.toJson(jsonObjects);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return "[]";
+	    }
+	}
+	
+	private static String checkDataFormat(String content) {
+		try {
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+	        DocumentBuilder builder = factory.newDocumentBuilder();
+	        builder.parse(new java.io.ByteArrayInputStream(content.getBytes()));
+		    return ".xml";
+		} catch (Exception e) {}
+		try {
+		    new JSONObject(new JSONTokener(content));
+		    return ".json";
+		} catch (Exception e) {}
+		try {
+			String[] lines = content.split("\\r?\\n");
+			if (lines.length < 2) {
+	            return null;
+	        }
+	        for (String line : lines) {
+	            if (!line.contains(",")) {
+	                return null;
+	            }
+	        }
+	        int columnCount = lines[0].split(",").length;
+	        for (String line : lines) {
+	            if (line.split(",").length != columnCount) {
+	                return null;
+	            }
+	        }
+		    return ".csv";
+		} catch (Exception e) {}
+		return null;
+	}
+	
+	private Provider readProvider(String path) {
+		String extension = "";
+		String fileName = Paths.get(path).getFileName().toString();
+
+	    int dotIndex = fileName.lastIndexOf('.');
+	    if (dotIndex > 0) {
+	        extension = fileName.substring(dotIndex + 1).toLowerCase();
+	    }
+		
+	    switch (extension) {
+    	case "xml":	
+    		break;
+    	case "json":
+    		String jsonContent;
+			try {
+				jsonContent = new String(Files.readAllBytes(Paths.get(path)));
+				
+	            JSONObject jsonObject = new JSONObject(jsonContent);
+	            String xmlString = XML.toString(jsonObject);
+	            Path tempFilePath = Files.createTempFile(UUID.randomUUID().toString(), ".xml");
+	            Files.write(tempFilePath, xmlString.getBytes());
+	            
+	            path = tempFilePath.toString();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+    		break;
+    	case "csv":
+    		String[] keys, values;
+    		try (BufferedReader br = new BufferedReader(new FileReader(path))) {
+    			keys = br.readLine().split(",");
+    			values = br.readLine().split(",");
+    			
+    			ObjectMapper mapper = new ObjectMapper();
+    		    ObjectNode rootNode = mapper.createObjectNode();
+    		     
+    		    for (int i = 0; i < keys.length; i++) {
+    		    	String[] keyPaths = keys[i].split("/");
+					ObjectNode currentNode = rootNode;
+					for (int j = 0; j < keyPaths.length - 1; j++) {
+					    if (!currentNode.has(keyPaths[j])) {
+					        currentNode.putObject(keyPaths[j]);
+					    }
+					    currentNode = (ObjectNode) currentNode.get(keyPaths[j]);
+					}
+					currentNode.put(keyPaths[keyPaths.length - 1], values[i]);
+    		    }
+
+    		    String jsonOutput = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(rootNode);
+    		    
+    		    Path tempFilePath = Files.createTempFile(UUID.randomUUID().toString(), ".json");
+    		    try (FileWriter fileWriter = new FileWriter(tempFilePath.toString())) {
+    	            fileWriter.write(jsonOutput);
+    	        }
+    		    return readProvider(tempFilePath.toString());
+            } catch (IOException e) {
+				e.printStackTrace();
+			}
+
+    		
+    		break;
+        default:
+            throw new IllegalArgumentException("Invalid File Format <.xml/.json/.csv>: ." + extension);
+	    }
+	    
+	    try {
+            File file = new File(path);
+            JAXBContext jaxbContext = JAXBContext.newInstance(Provider.class);
+            Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
+            Provider provider = (Provider) jaxbUnmarshaller.unmarshal(file);
+            
+            return provider;
+        } catch (JAXBException e) {
+            e.printStackTrace();
+        }
+		return null;
+	}
+	
+	public void setIndividual() {
+[MAP PAIRINGS]
+    }
+    
+	public void exportAsJSON(Object object, String path) {
+        Map<String, Object> convertedObject = new HashMap<>();
+        for (Field field : object.getClass().getDeclaredFields()) {
+            field.setAccessible(true);
+            try {
+                Object value = field.get(object);
+                if (value instanceof XMLGregorianCalendar) {
+                    convertedObject.put(field.getName(), ((XMLGregorianCalendar) value).toXMLFormat());
+                } else {
+                    convertedObject.put(field.getName(), value);
+                }
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        String json = gson.toJson(convertedObject);
+
+        try (FileWriter writer = new FileWriter(path + "/consumer.json")) {
+            writer.write(json);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+	
+	private String exportAsXML(Object object, String path) throws JAXBException {
+		JAXBContext jaxbContext = JAXBContext.newInstance(object.getClass());
+        Marshaller marshaller = jaxbContext.createMarshaller();
+        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+        StringWriter sw = new StringWriter();
+        marshaller.marshal(object, sw);
+        FileWriter writer;
+        try {
+            writer = new FileWriter(path + "/consumer.xml");
+            writer.write(sw.toString());
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return sw.toString();
+    }
+    
+    private void exportAsCSV(String xmlString, String csvPath) {
+    	String csvString = translateXmlStringToCsvString(xmlString);
+	    try {
+	        File csvFolder = new File(csvPath);
+	        if (!csvFolder.exists()) csvFolder.mkdirs();
+
+	        try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFolder + "/consumer.csv"))) {
+	        	writer.write(csvString);
+	        }
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    }
+	}	
+}
